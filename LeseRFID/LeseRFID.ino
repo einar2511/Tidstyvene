@@ -1,78 +1,68 @@
 /*
- * --------------------------------------------------------------------------------------------------------------------
- * Example sketch/program showing how to read new NUID from a PICC to serial.
- * --------------------------------------------------------------------------------------------------------------------
- * This is a MFRC522 library example; for further details and other examples see: https://github.com/miguelbalboa/rfid
  * 
- * Example sketch/program showing how to the read data from a PICC (that is: a RFID Tag or Card) using a MFRC522 based RFID
- * Reader on the Arduino SPI interface.
- * 
- * When the Arduino and the MFRC522 module are connected (see the pin layout below), load this sketch into Arduino IDE
- * then verify/compile and upload it. To see the output: use Tools, Serial Monitor of the IDE (hit Ctrl+Shft+M). When
- * you present a PICC (that is: a RFID Tag or Card) at reading distance of the MFRC522 Reader/PCD, the serial output
- * will show the type, and the NUID if a new card has been detected. Note: you may see "Timeout in communication" messages
- * when removing the PICC from reading distance too early.
- * 
- * @license Released into the public domain.
- * 
- * Typical pin layout used:
- * -----------------------------------------------------------------------------------------
- *             MFRC522      Arduino       Arduino   Arduino    Arduino          Arduino
- *             Reader/PCD   Uno           Mega      Nano v3    Leonardo/Micro   Pro Micro
- * Signal      Pin          Pin           Pin       Pin        Pin              Pin
- * -----------------------------------------------------------------------------------------
- * RST/Reset   RST          9             5         D9         RESET/ICSP-5     RST
- * SPI SS      SDA(SS)      10            53        D10        10               10
- * SPI MOSI    MOSI         11 / ICSP-4   51        D11        ICSP-4           16
- * SPI MISO    MISO         12 / ICSP-1   50        D12        ICSP-1           14
- * SPI SCK     SCK          13 / ICSP-3   52        D13        ICSP-3           15
+ * Standar PIN Layout for RFID leser MFRC522:
+ * ---------------------------------------
+ *             MFRC522      Arduino       
+ *             Reader/PCD   Uno           
+ * Signal      Pin          Pin           
+ * ---------------------------------------
+ * RST/Reset   RST          9             
+ * SPI SS      SDA(SS)      10            
+ * SPI MOSI    MOSI         11 / ICSP-4   
+ * SPI MISO    MISO         12 / ICSP-1   
+ * SPI SCK     SCK          13 / ICSP-3   
  */
 
+//Importerer bibloteker til RFID leser
 #include <SPI.h>
 #include <MFRC522.h>
 
+//Definerer PINs som RFID leseren skal bruke
 #define SS_PIN 10
-#define RST_PIN 9 
- 
-MFRC522 rfid(SS_PIN, RST_PIN); // Instance of the class
-MFRC522::MIFARE_Key key; 
+#define RST_PIN 9
 
-
-
-// Init array that will store new NUID 
-byte nuidPICC[3];
-
-
+/*Definerer forste og siste PIN som skal sende signal til Slave arduinoen.
+PINs i intervallet mellom disse vil også bli brukt til dette.*/
 const int startUtPin = 4;
 const int sluttUtPin = 7;
 
+//Oppretter en klasser for initsialisering av RFID leser, og nokkel.
+MFRC522 rfid(SS_PIN, RST_PIN);
+MFRC522::MIFARE_Key key; 
+
+//Oppretter en array som holder på ID til NFC tag paa RFID leser.
+byte nuidPICC[3];
+
+//Variabel for aktiv oppgave.
 int oppgaveNr = 0;
+
 int teller = 0;
 
 void setup() { 
-  Serial.begin(9600);
-  SPI.begin(); // Init SPI bus
-  rfid.PCD_Init(); // Init MFRC522 
+  
+  //Gjor klar de ulike kompoentene i RFID leser...
+  SPI.begin();
+  rfid.PCD_Init();
   for (byte i = 0; i < 6; i++) {
     key.keyByte[i] = 0xFF;
   }
   
-  //setter opp PINS som skal gi output.
+  //Setup av PINs som skal sende signaler.
   for(int pinNr = startUtPin; pinNr <= sluttUtPin ; pinNr++){
     pinMode(pinNr,OUTPUT);
     digitalWrite(pinNr,LOW);
   }
-
-}
-
- 
-void loop() { 
   
-  if ( ! rfid.PICC_IsNewCardPresent()){
-    /*Det maa vere en delay for det blir sent LOW signaler tibake, fordi 
-    signalet fra Brikkene ikke er konstante. Dette må skje i 10 millisekunder for 
-    uoutputen bli satt til low*/
+  //Serial.begin(9600);
+  
+}
+ 
+void loop() {
     
+  // PICC_IsNewCardPresent() søker om det er en NFC tag paa leseren.
+  if ( ! rfid.PICC_IsNewCardPresent()){
+    /*Signalet fra NFC tagen er ikke konstant. Paa denne maaten må PICC_IsNewCardPresent()
+    ikka faa signaler i 20 millisekunder foer signal PINene blir satt LOW.*/   
     if(teller == 20){
       teller++;
       for(int pinNr = startUtPin; pinNr <= sluttUtPin ; pinNr++){ 
@@ -85,49 +75,41 @@ void loop() {
     return;
   }
   
+  //Leser ID til NFC tag paa RFID leser.
+  rfid.PICC_ReadCardSerial()
+  /*
   if ( ! rfid.PICC_ReadCardSerial()){
-  }
+  }*/
 
   
-  MFRC522::PICC_Type piccType = rfid.PICC_GetType(rfid.uid.sak);
+  //MFRC522::PICC_Type piccType = rfid.PICC_GetType(rfid.uid.sak);
+    
+  //Gir bytes fra NFC tag, som brukes til identifikasjon. 
+  for (byte i = 0; i < 4; i++) {
+    nuidPICC[i] = rfid.uid.uidByte[i];
+  }
+    
+  //Hvis ID og oppgaveNr stemmer blir det sendt HIGH signal gjennom en ut pin.  
+  if(nuidPICC[0] == 206 && nuidPICC[1] == 126 && nuidPICC[2] == 49 && nuidPICC [3] == 181 && oppgaveNr == 0) {
+    digitalWrite(startUtPin,HIGH);
+    oppgaveNr++;
+  }   
+    
+  if(nuidPICC[0] == 62 && nuidPICC[1] == 148 && nuidPICC[2] == 49 && nuidPICC [3] == 181 && oppgaveNr == 1) {
+    digitalWrite((startUtPin+oppgaveNr),HIGH);
+    oppgaveNr++;
+  }
   
-    for (byte i = 0; i < 4; i++) {
-      nuidPICC[i] = rfid.uid.uidByte[i];
-    }
-    
-     if(nuidPICC[0] == 246 && nuidPICC[1] == 183 && nuidPICC[2] == 113 && nuidPICC [3] == 73) {
-      Serial.println("TAG"); 
-      for(int pinNr = startUtPin; pinNr <= sluttUtPin ; pinNr++){ 
-        digitalWrite(pinNr,LOW );
-      }
-      oppgaveNr = 0;
- 
-    }
-    
-    
-     
-    if(nuidPICC[0] == 206 && nuidPICC[1] == 126 && nuidPICC[2] == 49 && nuidPICC [3] == 181 && oppgaveNr == 0) {
-      digitalWrite(startUtPin,HIGH);
-      Serial.println("Her1"); 
-      oppgaveNr++;
-    }   
-    
- 
-    if(nuidPICC[0] == 62 && nuidPICC[1] == 148 && nuidPICC[2] == 49 && nuidPICC [3] == 181 && oppgaveNr == 1) {
-      digitalWrite((startUtPin+oppgaveNr),HIGH);
-      Serial.println("Her2"); 
-      oppgaveNr++;
-    }
-    if(nuidPICC[0] == 46 && nuidPICC[1] == 109 && nuidPICC[2] == 49 && nuidPICC [3] == 181 && oppgaveNr == 2) {
-      digitalWrite((startUtPin+oppgaveNr),HIGH);
-     Serial.println("Her3"); 
-      oppgaveNr++;
-    }
-    if(nuidPICC[0] == 142 && nuidPICC[1] == 109 && nuidPICC[2] == 49 && nuidPICC [3] == 181 && oppgaveNr == 3) {
-      digitalWrite((startUtPin+oppgaveNr),HIGH);
-      Serial.println("Her4"); 
-      oppgaveNr=0;
-    }  
+  if(nuidPICC[0] == 46 && nuidPICC[1] == 109 && nuidPICC[2] == 49 && nuidPICC [3] == 181 && oppgaveNr == 2) {
+    digitalWrite((startUtPin+oppgaveNr),HIGH); 
+    oppgaveNr++;
+  }
   
+  if(nuidPICC[0] == 142 && nuidPICC[1] == 109 && nuidPICC[2] == 49 && nuidPICC [3] == 181 && oppgaveNr == 3) {
+    digitalWrite((startUtPin+oppgaveNr),HIGH); 
+    oppgaveNr=0;
+  }  
+    
   teller = 0;
+  
 }
