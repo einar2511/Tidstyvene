@@ -1,219 +1,243 @@
+
+//Importerer bibloteker til NeoPixel
 #include <Adafruit_NeoPixel.h> 
 
+//Er 0 hvis porten som lyttes paa er LOW, er 1 hvis porten er HIGH
+int switchState = 0;
 
-int switchState = 0; // denne variablene er 0 eller 1, avhengig om den porten som bli lyttet pp                    //gir ut HIGH signal
-int NeoPixelPIN = 9; //Pin som gir OUTPUT til NeoPixel
-int NeoSirkelPIN = 8; //Pin som styrer neoPixel sirkeheln. 
+//PIN som gir OUTPUT til NeoPixelLed
+int neoPixelLedPin = 9;
+//PIN som gir OUTPUT til NeoPixelRing.
+int neoPixelRingPin = 8; 
 
-//Pin hvor LEDer for tidsvising starter og slutter
-const int startNrLed = 2; 
-const int sluttNrLed = 7;
+//Definerer forste og siste PIN som skal brukes til 
+const int forsteLedPin = 2; 
+const int sisteLedPin = 7;
 
-//Pin hvor det blir lyttet
-const int startNrLytter = 10;
-const int sluttNrLytter = 13;
+/*Definerer forste og siste PIN som skal lytte etter signal fra Master arduinoen.
+PINs i intervallet mellom disse vil også bli brukt til dette.*/
+const int forsteLyttePin = 10;
+const int sisteLyttePin = 13;
 
-//definerer NeoPixel perene.
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(60, NeoPixelPIN, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel sirkel = Adafruit_NeoPixel(60, NeoSirkelPIN, NEO_GRB + NEO_KHZ800);
-
-//En variael som brukes for og lagre tid i klokken.
-unsigned long previousTime = 0;
+//Definerer NeoPixel Lysstripe(LEDer) og Ring.
+Adafruit_NeoPixel neoPixelStrip = Adafruit_NeoPixel(60, neoPixelLedPin, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel neoPixelRing = Adafruit_NeoPixel(60, neoPixelRingPin, NEO_GRB + NEO_KHZ800);
 
 //Tider til de forskjellige oppgavene i millisekunder
 const unsigned long tider[] = {100000,10000,10000,100000};
 
-//antalLed i klokken.
-int antLed = 6;
-//antall blink som 
+//Variabel for lagring av tid
+unsigned long previousTime = 0;
+
+//Antall LED i nettelling.
+const int antLed = (sisteLedPin-forsteLedPin)+1;
+
+//Antall blink
 int antBlink = 8;
 
-//tid pr milliskeunder i blink.
+//Tid pr blink i millisekunder
 int tidBlink = 300;
 
-//Hvilken oppgave som er paa gang.
+//Variabel for aktiv oppgave.
 int oppgaveNr = 0;
 
 void setup() {
-  Serial.begin(9600);
-  //Starter NeoPixel
-  strip.begin();
-  sirkel.begin();
-  strip.show();  
-  sirkel.show();
   
-  //Setter opp stedet som skal lytte.
-  for(int pinNr = startNrLytter; pinNr <= sluttNrLytter ; pinNr++){
+  //Setter opp nedPixel objekter.
+  neoPixelStrip.begin();
+  neoPixelRing.begin();
+  neoPixelStrip.show();  
+  neoPixelRing.show();
+  
+  //Setter opp lytte PINs
+  for(int pinNr = forsteLyttePin; pinNr <= sisteLyttePin ; pinNr++){
     pinMode(pinNr,INPUT);
   }
  
- //Setter opp utputteen til klokken
- for(int pinNr = startNrLed; pinNr <= sluttNrLed; pinNr++){
+ //Setter opp PINs for bruk i nedtelling.
+ for(int pinNr = forsteLedPin; pinNr <= sisteLedPin; pinNr++){
      delay(2);
     pinMode(pinNr,OUTPUT);
     digitalWrite(pinNr,LOW);
   }
   
   //setter opp utputt til NeoPixel
-  pinMode(NeoPixelPIN,OUTPUT);
-  //setter opp utputt til NeoSirkel
-  pinMode(NeoSirkelPIN,OUTPUT);
+  pinMode(neoPixelLedPin,OUTPUT);
+  pinMode(neoPixelRingPin,OUTPUT);
+  
+  //Serial.begin(9600);
 }
 
 void loop() { 
   /*Kjorer gjennom alle lytterene og ser om noen av de gir ut et HIGH signal.
   Det lytteren som git HIGH signalet, nå også stemmer overens med oppgaven som systemet
   naa er paa. Hvis den gjør dette, starter den en klokke*/
-  for(int i = startNrLytter; i <=sluttNrLytter; i++){
+  for(int i = forsteLyttePin; i <=sisteLyttePin; i++){
       switchState = digitalRead(i);
-      if(switchState == HIGH && (oppgaveNr+startNrLytter) == i){
-        settBunnplateHvit();
-        startKlokke(tider[i-startNrLytter],i);
+      if(switchState == HIGH && (oppgaveNr+forsteLyttePin) == i){
+        settRingHvit();
+        startKlokke(tider[i-forsteLyttePin],i);
         oppgaveNr++;
       }
-      settBunnplateAv();
+      settRingAv();
   }
+  
+  //Resetter boksen etter 10 sekunder
   if(oppgaveNr == 4){
-    Serial.println("Her");
     delay(10000);
     for(int i = 0; i < 4; i++){
-      strip.setPixelColor(i, 0, 0, 0);
+      neoPixelStrip.setPixelColor(i, 0, 0, 0);
     }
-    strip.show();
+    neoPixelStrip.show();
     oppgaveNr = 0;
   }  
 }
 
 void startKlokke(unsigned long tidHandling, int lytter){
-  // henter tid fra hvor lenge systemet har vært i gang.
+  
+  //Henter tid fra systemets start.
   unsigned long currentTime = millis();
-  //tid pr Led.
+  
+  //Tid mellom hver LED skal starte.
   unsigned long intervall = (tidHandling/antLed);  
   
-  //teller hvilken Led klokken er paa.
-  int teller = 0;
+  //Heller hvilken LED som er den siste.
+  int tellerLed = 0;
   
-  
-  while(teller < antLed && switchState == HIGH){
+  /*ens man ikke er på den siste LEDen(er ferdig nedtelt), og det blir sendt HIGH signal
+  fra masteren til lytteporten*/
+  while(tellerLed < antLed && switchState == HIGH){
+    
     //Skrur paa neste LED.
-    digitalWrite((teller+startNrLed),HIGH);
-    teller++; 
-    //Hopper ut naar neste LEd skal lyse.
+    digitalWrite((tellerLed+forsteLedPin),HIGH);
+    tellerLed++; 
+    
+    //Venter til neste LED skal lyse.
     unsigned long currentTime = 0;
     while(currentTime - previousTime <= intervall) {
       switchState = digitalRead(lytter);
-      //Hvis boksen blir tatt av.
+      
+      //Hvis signalet som blir sendt fra master blir LOW.(Er oppgaven ferdig inne tiden).
       if(switchState == LOW ){
-        skruAvAlle();
-        //Skrur paa en NeoPixel LED.
-        strip.setPixelColor(oppgaveNr, 255, 255, 0);
-        strip.setBrightness(255);
-        strip.show();
-        blinkBunnplate(); 
+        settLedAv();
+        skruPaStrip(oppgaveNr);
+        blinkRing(); 
         return;
       }
       delay(5);
       currentTime += 5;
     }
-   //Hvis alle LEd er slott paa. Saa starter det og blinke.
-   if(teller == antLed-1 && switchState == HIGH){
-      startBlink();
+    
+   //Hvis alle LED er paa, starter det og blinke.
+   if(tellerLed == antLed-1 && switchState == HIGH){
+      startBlinkLed();
       switchState = digitalRead(lytter);
+      
       //Hvis du rekker og taa av innen det er ferdig og blinke, faar du en stjerne.
       if(switchState == LOW ){
-        skruAvAlle();
-        strip.setPixelColor(oppgaveNr, 255, 255, 0);
-        strip.setBrightness(255);
-        strip.show();      
-        blinkBunnplate();       
+        settLedAv();
+        skruPaStrip(oppgaveNr); 
+        blinkRing();       
         return;
       }else{
+        
+        //Saa lenge boksen er paa lyser ring rodt.
         while(switchState == HIGH){
-        settBunnplateRod();
+        settRingRod();
         switchState = digitalRead(lytter);
         }
-        settBunnplateAv();
+        settRingAv();
       }  
     }
   }
   
   if(switchState == LOW ){
-    skruAvAlle();
-    settBunnplateAv();
+    settLedAv();
+    settRingAv();
     return;
   }  
 }
 
-//Blinker i et gitt antall ganger.
-void startBlink(){
-  boolean statusLed = false; 
-  for(int i = 0; i < antBlink; i++){
-  if(statusLed){
-    skruPaaAlle();
-    delay(tidBlink); 
-  }else{
-    skruAvAlle();
-    delay(tidBlink);
-  }   
-  statusLed = !statusLed;
- }
+//LEDer binker et gitt antall ganger.
+void startBlinkLed(){
   
+  boolean statusLed = false;  
+  for(int i = 0; i < antBlink; i++){
+    if(statusLed){
+      settLedPaa();
+      delay(tidBlink); 
+    }else{
+      settLedAv();
+      delay(tidBlink);
+    }   
+    statusLed = !statusLed;
+ }  
+}
+
+//Skrur paa en bestemt NeoPixel led i rekken, basert på nummer.
+void skruPaStrip(int nr){
+  neoPixelStrip.setPixelColor(nr, 255, 255, 0);
+  neoPixelStrip.setBrightness(255);
+  neoPixelStrip.show();  
 }
 
 //skrur av alle LED i klokken
-void skruAvAlle(){
-  for(int pinNr = startNrLed; pinNr <=sluttNrLed; pinNr++){
+void settLedAv(){
+  for(int pinNr = forsteLedPin; pinNr <=sisteLedPin; pinNr++){
           digitalWrite(pinNr,LOW);
     }
 }
 
-//skrur paa elle LED i klokken
-void skruPaaAlle(){
-  for(int pinNr = startNrLed; pinNr <=sluttNrLed; pinNr++){
+//Skrur paa elle LED i klokken
+void settLedPaa(){
+  for(int pinNr = forsteLedPin; pinNr <=sisteLedPin; pinNr++){
           digitalWrite(pinNr,HIGH);
     }
 }
 
-void settBunnplateHvit(){
+//Skrur av ring
+void settRingAv(){
   for(int i = 0; i < 24; i++){
-      sirkel.setPixelColor(i, 255, 255, 255);
+      neoPixelRing.setPixelColor(i, 0, 0, 0);
     }  
-   sirkel.setBrightness(255);
-   sirkel.show();
+   neoPixelRing.show();
 }
 
-void settBunnplateAv(){
+//Setter ring til Hvit
+void settRingHvit(){
   for(int i = 0; i < 24; i++){
-      sirkel.setPixelColor(i, 0, 0, 0);
+      neoPixelRing.setPixelColor(i, 255, 255, 255);
     }  
-   sirkel.show();
+   neoPixelRing.setBrightness(255);
+   neoPixelRing.show();
 }
 
-void settBunnplateRod(){
+//Setter ring til Rod
+void settRingRod(){
   for(int i = 0; i < 24; i++){
-      sirkel.setPixelColor(i, 255, 0, 0);
+      neoPixelRing.setPixelColor(i, 255, 0, 0);
     }  
-   sirkel.setBrightness(255);
-   sirkel.show(); 
+   neoPixelRing.setBrightness(255);
+   neoPixelRing.show(); 
 }
 
-void settBunnplateGron(){
+void settRingGron(){
   for(int i = 0; i < 24; i++){
-      sirkel.setPixelColor(i, 0, 255, 0);
+      neoPixelRing.setPixelColor(i, 0, 255, 0);
     }  
-   sirkel.setBrightness(255);
-   sirkel.show(); 
+   neoPixelRing.setBrightness(255);
+   neoPixelRing.show(); 
 }
 
-void blinkBunnplate(){
-  Serial.println("Bunnplate");
+//Ring binker et gitt antall ganger.
+void blinkRing(){
   boolean statusLed = false; 
   for(int i = 0; i < antBlink; i++){
   if(statusLed){
-    settBunnplateGron();
+    settRingGron();
     delay(tidBlink); 
   }else{
-    settBunnplateAv();
+    settRingAv();
     delay(tidBlink);
   }   
   statusLed = !statusLed;
