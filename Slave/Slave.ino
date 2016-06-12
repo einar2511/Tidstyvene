@@ -242,5 +242,4 @@ void blinkRing(){
   }   
   statusLed = !statusLed;
  } 
-  
 }
