@@ -221,6 +221,7 @@ void settRingRod(){
    neoPixelRing.show(); 
 }
 
+//Setter ring til Gronn
 void settRingGron(){
   for(int i = 0; i < 24; i++){
       neoPixelRing.setPixelColor(i, 0, 255, 0);
