@@ -76,7 +76,7 @@ void loop() {
   }
   
   //Leser ID til NFC tag paa RFID leser.
-  rfid.PICC_ReadCardSerial()
+  rfid.PICC_ReadCardSerial();
   /*
   if ( ! rfid.PICC_ReadCardSerial()){
   }*/
